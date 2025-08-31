@@ -107,12 +107,10 @@ dummy_suggestions = [
 # Post dummy comments
 for file_path in react_files:
     for s in dummy_suggestions:
-        pr.create_review_comment(
-            body=f"[AI Review] {s['suggestion']} ({s['type']})",
-            commit_id=pr.head.sha,
-            path=file_path,
-            line=s["line"],
-            side="RIGHT"
+        pr.create_issue_comment(
+            f"[AI Review] {s['suggestion']} ({s['type']})"
         )
+        print(f"Posted comment: {s['suggestion']}")
+
 
 print(f"Posted dummy AI comments for PR #{PR_NUMBER}")

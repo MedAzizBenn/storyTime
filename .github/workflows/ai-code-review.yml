@@ -1,0 +1,38 @@
+name: AI Code Review Prototype
+
+on:
+  pull_request:
+    branches: [develop]
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      # Install dependencies using the exact python interpreter
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install PyGithub openai
+
+      # Debug to confirm installation
+      - name: Check installed packages
+        run: |
+          python3 --version
+          which python3
+          python3 -m pip list
+
+      # Run your AI review script
+      - name: Run AI review
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python3 .github/scripts/ai_review.py

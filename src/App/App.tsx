@@ -35,7 +35,7 @@ const App = () => {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [showFullscreenBook, setShowFullscreenBook] = useState<boolean>(false);
-
+  console.log("test");
   // Instead of generating, we use fixed images in /public/images
   const [images, setImages] = useState<string[]>([
     "/images/page1.jpg",

@@ -1,6 +1,8 @@
 from github import Github, Auth
 import os
 import json
+import re
+from github import Github
 from openai import OpenAI
 
 # --- Setup ---
@@ -18,7 +20,21 @@ client = OpenAI(
     api_key=OPENROUTER_API_KEY,
 )
 
-# --- AI review function ---
+# --- Step 1: Get changed files in PR ---
+files = pr.get_files()
+react_files = [f for f in files if f.filename.endswith((".jsx", ".tsx", ".js", ".ts"))]
+
+# --- Step 2: AI Review ---
+def parse_ai_json(text_output: str):
+    """Extract JSON array from AI response, even if extra text is around it."""
+    try:
+        match = re.search(r"\[.*\]", text_output, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+    except json.JSONDecodeError as e:
+        print(f"❌ Failed to parse JSON: {e}")
+    return []
+
 def get_ai_review_suggestions(file_path: str, patch: str, file_content: str):
     prompt = f"""
 You are a senior code reviewer. Review the following React/JS/TS file.
@@ -44,14 +60,12 @@ Full file content:
         temperature=0.3,
         max_tokens=800,
     )
-    text_output = response.choices[0].message.content.strip()
-    try:
-        suggestions = json.loads(text_output)
-        if isinstance(suggestions, list):
-            return suggestions
-    except json.JSONDecodeError:
+
+    text_output = response.choices[0].message.content
+    suggestions = parse_ai_json(text_output)
+    if not suggestions:
         print(f"❌ Failed to parse AI response for {file_path}:\n{text_output}")
-    return []
+    return suggestions
 
 # --- Post comments ---
 files = pr.get_files()

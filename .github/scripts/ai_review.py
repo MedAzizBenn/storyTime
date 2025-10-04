@@ -1,116 +1,82 @@
-# import os
-# import subprocess
-# from github import Github
-# from transformers import AutoTokenizer, AutoModelForCausalLM
-# import torch
-# import json
-
-# # -------------------------
-# # Config
-# # -------------------------
-# MODEL_PATH = "/opt/models/starcoder"  # local StarCoder path
-# REPO_PATH = "."  # GitHub Action checkout
-# MAX_TOKENS = 500
-
-# # GitHub PR info
-# GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
-# PR_NUMBER = int(os.environ["PR_NUMBER"])
-# REPO_NAME = os.environ["GITHUB_REPOSITORY"]
-
-# # -------------------------
-# # Load LLaMA 3
-# # -------------------------
-# tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-# model = AutoModelForCausalLM.from_pretrained(MODEL_PATH, device_map="auto")
-# device = "cuda" if torch.cuda.is_available() else "cpu"
-# model.to(device)
-
-# # -------------------------
-# # Connect to GitHub
-# # -------------------------
-# gh = Github(GITHUB_TOKEN)
-# repo = gh.get_repo(REPO_NAME)
-# pr = repo.get_pull(PR_NUMBER)
-
-# # -------------------------
-# # Get changed React files
-# # -------------------------
-# diff_output = subprocess.check_output(
-#     ["git", "diff", "--name-only", "origin/develop...HEAD"],
-#     cwd=REPO_PATH
-# ).decode("utf-8").splitlines()
-
-# react_files = [f for f in diff_output if f.endswith((".js", ".jsx", ".tsx"))]
-
-# # -------------------------
-# # Review function
-# # -------------------------
-# def review_code(code):
-#     prompt = f"""
-# You are a senior React developer. Review this code and suggest improvements, bugs, and style issues.
-# Return JSON array with objects: line (number), suggestion (text), type (bug/style/performance).
-
-# Code:
-# {code}
-# """
-#     inputs = tokenizer(prompt, return_tensors="pt").to(device)
-#     outputs = model.generate(**inputs, max_new_tokens=MAX_TOKENS)
-#     text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    
-#     try:
-#         return json.loads(text)
-#     except:
-#         # fallback if not proper JSON
-#         return [{"line": 1, "suggestion": text, "type": "info"}]
-
-# # -------------------------
-# # Run review for each file
-# # -------------------------
-# for file_path in react_files:
-#     with open(file_path, "r", encoding="utf-8") as f:
-#         code = f.read()
-
-#     suggestions = review_code(code)
-
-#     for s in suggestions:
-#         pr.create_review_comment(
-#             body=f"[AI Review] {s['suggestion']} ({s['type']})",
-#             commit_id=pr.head.sha,
-#             path=file_path,
-#             line=s.get("line", 1),
-#             side="RIGHT"
-#         )
-
-# print(f"Reviewed {len(react_files)} React files in PR #{PR_NUMBER}")
-
 import os
+import json
 from github import Github
+from openai import OpenAI
 
-# GitHub PR info
+# --- Setup ---
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 PR_NUMBER = int(os.environ["PR_NUMBER"])
 REPO_NAME = os.environ["GITHUB_REPOSITORY"]
+OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 
 gh = Github(GITHUB_TOKEN)
 repo = gh.get_repo(REPO_NAME)
 pr = repo.get_pull(PR_NUMBER)
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Dummy changed files (for prototype)
-react_files = ["src/App.jsx", "src/Button.jsx"]
+# --- Step 1: Get changed files in PR ---
+files = pr.get_files()
+react_files = [f for f in files if f.filename.endswith((".jsx", ".tsx", ".js", ".ts"))]
 
-# Dummy AI suggestions
-dummy_suggestions = [
-    {"line": 1, "suggestion": "Consider using useEffect here.", "type": "style"},
-    {"line": 5, "suggestion": "Avoid using index as key in lists.", "type": "bug"}
-]
+# --- Step 2: Scan each file ---
+def get_ai_review_suggestions(file_path: str, patch: str, file_content: str):
+    """
+    Sends the file patch and content to GPT to get structured code review comments.
+    """
+    prompt = f"""
+You are a senior code reviewer. Review the following React/JavaScript file.
+Give your feedback as a JSON list with objects of:
+- line (number)
+- suggestion (short clear comment)
+- type (one of: bug, performance, readability, style, security)
 
-# Post dummy comments
-for file_path in react_files:
-    for s in dummy_suggestions:
-        pr.create_issue_comment(
-            f"[AI Review] {s['suggestion']} ({s['type']})"
-        )
-        print(f"Posted comment: {s['suggestion']}")
+Do NOT output anything except valid JSON.
 
+File path: {file_path}
 
-print(f"Posted dummy AI comments for PR #{PR_NUMBER}")
+Patch:
+{patch}
+
+Full file content:
+{file_content}
+"""
+
+    response = client.responses.create(
+        model="gpt-5",
+        input=prompt,
+        temperature=0.3,
+        max_output_tokens=800
+    )
+
+    text_output = response.output[0].content[0].text
+    try:
+        suggestions = json.loads(text_output)
+        if isinstance(suggestions, list):
+            return suggestions
+    except json.JSONDecodeError:
+        print(f"❌ Failed to parse AI response for {file_path}:\n{text_output}")
+    return []
+
+# --- Step 3: Post comments ---
+for f in react_files:
+    file_path = f.filename
+    patch = f.patch or ""
+
+    # Get file content from repo
+    file_obj = repo.get_contents(file_path, ref=pr.head.ref)
+    file_content = file_obj.decoded_content.decode("utf-8")
+
+    suggestions = get_ai_review_suggestions(file_path, patch, file_content)
+    for s in suggestions:
+        try:
+            pr.create_review_comment(
+                body=f"[AI Review] {s['suggestion']} ({s['type']})",
+                commit_id=pr.head.sha,
+                path=file_path,
+                line=s["line"],
+                side="RIGHT"
+            )
+        except Exception as e:
+            print(f"⚠️ Failed to comment on {file_path}:{s.get('line')} — {e}")
+
+print(f"✅ AI review posted for PR #{PR_NUMBER}")

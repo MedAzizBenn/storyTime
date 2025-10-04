@@ -16,10 +16,13 @@ jobs:
           python-version: 3.11
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install PyGithub
+          pip install openai
 
       - name: Run AI review (mock)
         env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_REPOSITORY: ${{ github.repository }}

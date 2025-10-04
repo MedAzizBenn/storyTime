@@ -7,21 +7,31 @@ from openai import OpenAI
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 PR_NUMBER = int(os.environ["PR_NUMBER"])
 REPO_NAME = os.environ["GITHUB_REPOSITORY"]
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
 
+# Optional for OpenRouter rankings
+SITE_URL = os.environ.get("SITE_URL", "https://example.com")
+SITE_TITLE = os.environ.get("SITE_TITLE", "AI Code Reviewer")
+
+# GitHub client
 gh = Github(GITHUB_TOKEN)
 repo = gh.get_repo(REPO_NAME)
 pr = repo.get_pull(PR_NUMBER)
-client = OpenAI(api_key=OPENAI_API_KEY)
+
+# OpenRouter client
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_API_KEY,
+)
 
 # --- Step 1: Get changed files in PR ---
 files = pr.get_files()
 react_files = [f for f in files if f.filename.endswith((".jsx", ".tsx", ".js", ".ts"))]
 
-# --- Step 2: Scan each file ---
+# --- Step 2: AI Review ---
 def get_ai_review_suggestions(file_path: str, patch: str, file_content: str):
     """
-    Sends the file patch and content to GPT to get structured code review comments.
+    Sends the file patch and content to OpenRouter GPT model to get structured code review comments.
     """
     prompt = f"""
 You are a senior code reviewer. Review the following React/JavaScript file.
@@ -41,14 +51,23 @@ Full file content:
 {file_content}
 """
 
-    response = client.responses.create(
-        model="gpt-5",
-        input=prompt,
+    response = client.chat.completions.create(
+        extra_headers={
+            "HTTP-Referer": SITE_URL,
+            "X-Title": SITE_TITLE,
+        },
+        model="openai/gpt-4o",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
         temperature=0.3,
-        max_output_tokens=800
+        max_tokens=800,
     )
 
-    text_output = response.output[0].content[0].text
+    text_output = response.choices[0].message.content
     try:
         suggestions = json.loads(text_output)
         if isinstance(suggestions, list):

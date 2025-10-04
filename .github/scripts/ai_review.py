@@ -106,8 +106,9 @@ for f in react_files:
         try:
             # Post general PR comment instead of inline
             pr.create_issue_comment(
-                body=f"[AI Review] {file_path}:{s['line']} — {s['suggestion']} ({s['type']})"
+                f"[AI Review] {s['suggestion']} ({s['type']})"
             )
+            print(f"Posted comment: {s['suggestion']}")
         except Exception as e:
             print(f"⚠️ Failed to comment on {file_path}:{s.get('line')} — {e}")
 

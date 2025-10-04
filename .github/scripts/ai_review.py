@@ -68,26 +68,46 @@ Full file content:
     return suggestions
 
 # --- Post comments ---
-files = pr.get_files()
-react_files = [f for f in files if f.filename.endswith((".jsx", ".tsx", ".js", ".ts"))]
+# files = pr.get_files()
+# react_files = [f for f in files if f.filename.endswith((".jsx", ".tsx", ".js", ".ts"))]
 
+# for f in react_files:
+#     file_path = f.filename
+#     patch = f.patch or ""
+#     file_obj = repo.get_contents(file_path, ref=pr.head.ref)
+#     file_content = file_obj.decoded_content.decode("utf-8")
+
+#     suggestions = get_ai_review_suggestions(file_path, patch, file_content)
+#     for s in suggestions:
+#         try:
+#             pr.create_review_comment(
+#                 body=f"[AI Review] {s['suggestion']} ({s['type']})",
+#                 commit_id=pr.head.sha,
+#                 path=file_path,
+#                 line=s["line"],
+#                 side="RIGHT",
+#             )
+#         except Exception as e:
+#             print(f"⚠️ Failed to comment on {file_path}:{s.get('line')} — {e}")
+
+# print(f"✅ AI review posted for PR #{PR_NUMBER}")
+
+# --- Step 3: Post comments ---
 for f in react_files:
     file_path = f.filename
     patch = f.patch or ""
+
+    # Get file content from repo
     file_obj = repo.get_contents(file_path, ref=pr.head.ref)
     file_content = file_obj.decoded_content.decode("utf-8")
 
     suggestions = get_ai_review_suggestions(file_path, patch, file_content)
     for s in suggestions:
         try:
-            pr.create_review_comment(
-                body=f"[AI Review] {s['suggestion']} ({s['type']})",
-                commit_id=pr.head.sha,
-                path=file_path,
-                line=s["line"],
-                side="RIGHT",
+            # Post general PR comment instead of inline
+            pr.create_issue_comment(
+                body=f"[AI Review] {file_path}:{s['line']} — {s['suggestion']} ({s['type']})"
             )
         except Exception as e:
             print(f"⚠️ Failed to comment on {file_path}:{s.get('line')} — {e}")
 
-print(f"✅ AI review posted for PR #{PR_NUMBER}")

@@ -8,7 +8,7 @@ const TestComponent = () => {
     setCount(count + 1);
     console.log("Increment clicked"); // AI might suggest removing this
   };
-
+  console.log("Component rendered");
   // Decrement counter
   const decrement = () => {
     setCount(count - 1);
